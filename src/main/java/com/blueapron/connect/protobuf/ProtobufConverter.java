@@ -1,5 +1,6 @@
 package com.blueapron.connect.protobuf;
 
+import com.google.protobuf.Descriptors;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -15,8 +16,12 @@ import java.util.Map;
  */
 public class ProtobufConverter implements Converter {
   private static final Logger log = LoggerFactory.getLogger(ProtobufConverter.class);
-  private static final String PROTO_CLASS_NAME_CONFIG = "protoClassName";
+
   private static final String LEGACY_NAME_CONFIG = "legacyName";
+  private static final String PROTOBUF_DESCRIPTOR_SET = "protoFileDescriptorSet";
+  private static final String PROTOBUF_TYPE = "protoTypeName";
+  private static final String PROTOBUF_DESCRIPTOR_SET_DEFAULT = "/opt/connect/messages.fds";
+
   private ProtobufData protobufData;
 
   private boolean isInvalidConfiguration(Object proto, boolean isKey) {
@@ -28,23 +33,26 @@ public class ProtobufConverter implements Converter {
     Object legacyName = configs.get(LEGACY_NAME_CONFIG);
     String legacyNameString = legacyName == null ? "legacy_name" : legacyName.toString();
 
-    Object protoClassName = configs.get(PROTO_CLASS_NAME_CONFIG);
-    if (isInvalidConfiguration(protoClassName, isKey)) {
-      throw new ConnectException("Value converter must have a " + PROTO_CLASS_NAME_CONFIG + " configured");
+    Object descriptorFile = configs.get(PROTOBUF_DESCRIPTOR_SET);
+    String descriptorFileString = descriptorFile == null ? PROTOBUF_DESCRIPTOR_SET_DEFAULT : descriptorFile.toString();
+
+    Object protoTypeName = configs.get(PROTOBUF_TYPE);
+
+    if (isInvalidConfiguration(protoTypeName, isKey)) {
+      throw new ConnectException("Value converter must have a " + PROTOBUF_TYPE + " configured");
     }
 
-    if (protoClassName == null) {
+    if (protoTypeName == null) {
       protobufData = null;
       return;
     }
 
-    String protoClassNameString = protoClassName.toString();
     try {
-      protobufData = new ProtobufData(Class.forName(protoClassNameString).asSubclass(com.google.protobuf.GeneratedMessageV3.class), legacyNameString);
-    } catch (ClassNotFoundException e) {
-      throw new ConnectException("Proto class " + protoClassNameString + " not found in the classpath");
-    } catch (ClassCastException e) {
-      throw new ConnectException("Proto class " + protoClassNameString + " is not a valid proto3 message class");
+      final DescriptorSetSchemaProvider provider = new DescriptorSetSchemaProvider(descriptorFileString);
+      Descriptors.Descriptor rootMessageDescriptor = provider.getDescriptorForTypeName(protoTypeName.toString());
+      protobufData = new ProtobufData(rootMessageDescriptor, legacyNameString);
+    } catch(Exception e) {
+      throw new ConnectException(e);
     }
   }
 

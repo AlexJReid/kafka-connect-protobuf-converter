@@ -5,6 +5,7 @@ import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -17,17 +18,20 @@ import java.util.Map;
 
 public class ProtobufConverterTest {
 
-  private final String TEST_MESSAGE_CLASS_NAME = "com.blueapron.connect.protobuf.TestMessageProtos$TestMessage";
+  private final String TEST_MESSAGE_CLASS_NAME = "TestMessage";
   private static final String TEST_MSG_STRING = "Hello World";
   private static final String LEGACY_MSG_STRING = "Some renamed field";
-  private static final TestMessage HELLO_WORLD_MESSAGE = TestMessage.newBuilder().setTestString(TEST_MSG_STRING).setSomeField(LEGACY_MSG_STRING).build();
+  private static final TestMessage HELLO_WORLD_MESSAGE = TestMessage.newBuilder()
+    .setTestString(TEST_MSG_STRING)
+    .setSomeField(LEGACY_MSG_STRING)
+    .build();
 
   private Schema getTestMessageSchema() {
     final SchemaBuilder builder = SchemaBuilder.struct();
     final SchemaBuilder fieldBuilder = SchemaBuilder.string();
     fieldBuilder.optional();
     builder.field("test_string", fieldBuilder.build());
-    builder.field("legacy_field_name", fieldBuilder.build());
+    builder.field("some_field", fieldBuilder.build());
     return builder.build();
   }
 
@@ -35,15 +39,16 @@ public class ProtobufConverterTest {
     Schema schema = getTestMessageSchema();
     Struct result = new Struct(schema.schema());
     result.put("test_string", messageText);
-    result.put("legacy_field_name", legacyFieldText);
+    result.put("some_field", legacyFieldText);
     return result;
   }
 
-  private ProtobufConverter getConfiguredProtobufConverter(String protobufClassName, boolean isKey) {
+  private ProtobufConverter getConfiguredProtobufConverter(String protobufType, boolean isKey) {
     ProtobufConverter protobufConverter = new ProtobufConverter();
 
     Map<String, Object> configs = new HashMap<String, Object>();
-    configs.put("protoClassName", protobufClassName);
+    configs.put("protoTypeName", protobufType);
+    configs.put("protoFileDescriptorSet", this.getClass().getClassLoader().getResource("test.fds").getPath());
 
     protobufConverter.configure(configs, isKey);
 
@@ -64,11 +69,6 @@ public class ProtobufConverterTest {
   @Test(expected = ConnectException.class)
   public void testInvalidClassValueConverter() {
     getConfiguredProtobufConverter("com.does.not.exist", false);
-  }
-
-  @Test(expected = ConnectException.class)
-  public void testNonProtoClassValueConverter() {
-    getConfiguredProtobufConverter("java.lang.String", true);
   }
 
   @Test

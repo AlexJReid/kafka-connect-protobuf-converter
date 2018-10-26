@@ -1,63 +1,44 @@
 package com.blueapron.connect.protobuf;
 
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Descriptors;
+import com.google.protobuf.*;
+import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.OneofDescriptor;
-import com.google.protobuf.GeneratedMessageV3;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Message;
+import com.google.protobuf.util.Timestamps;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaAndValue;
-import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 
-import java.lang.reflect.Method;
+import java.lang.Enum;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import com.google.protobuf.util.Timestamps;
+import java.util.*;
 
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.BOOL;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.BYTES;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.DOUBLE;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.ENUM;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.FLOAT;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.INT32;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.INT64;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.MESSAGE;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.SINT32;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.SINT64;
-import static com.google.protobuf.Descriptors.FieldDescriptor.Type.STRING;
+import static com.google.protobuf.Descriptors.FieldDescriptor.Type.*;
 
 
 class ProtobufData {
-  private final Method newBuilder;
+  public static final Descriptors.FieldDescriptor.Type[] PROTO_TYPES_WITH_DEFAULTS = new Descriptors.FieldDescriptor.Type[]{INT32, INT64, SINT32, SINT64, FLOAT, DOUBLE, BOOL, STRING, BYTES, ENUM};
+  private final Descriptor messageDescriptor;
   private final Schema schema;
   private final String legacyName;
-  public static final Descriptors.FieldDescriptor.Type[] PROTO_TYPES_WITH_DEFAULTS = new Descriptors.FieldDescriptor.Type[] { INT32, INT64, SINT32, SINT64, FLOAT, DOUBLE, BOOL, STRING, BYTES, ENUM };
   private HashMap<String, String> connectProtoNameMap = new HashMap<String, String>();
 
-  private GeneratedMessageV3.Builder getBuilder() {
-    try {
-      return (GeneratedMessageV3.Builder) newBuilder.invoke(Object.class);
-    } catch (Exception e) {
-      throw new ConnectException("Not a valid proto3 builder", e);
-    }
+  ProtobufData(Descriptor descriptor, String legacyName) {
+    this.messageDescriptor = descriptor;
+    this.legacyName = legacyName;
+    this.schema = toConnectSchema(DynamicMessage.getDefaultInstance(messageDescriptor));
+  }
+
+  private Message.Builder getBuilder() {
+    return DynamicMessage.newBuilder(messageDescriptor);
   }
 
   private Message getMessage(byte[] value) {
     try {
-      return getBuilder().mergeFrom(value).build();
+      return DynamicMessage.parseFrom(messageDescriptor, value);
     } catch (InvalidProtocolBufferException e) {
       throw new DataException("Invalid protobuf data", e);
     }
@@ -69,7 +50,7 @@ class ProtobufData {
 
   private String getConnectFieldName(Descriptors.FieldDescriptor descriptor) {
     String name = descriptor.getName();
-    for (Map.Entry<Descriptors.FieldDescriptor, Object> option: descriptor.getOptions().getAllFields().entrySet()) {
+    for (Map.Entry<Descriptors.FieldDescriptor, Object> option : descriptor.getOptions().getAllFields().entrySet()) {
       if (option.getKey().getName().equalsIgnoreCase(this.legacyName)) {
         name = option.getValue().toString();
       }
@@ -81,18 +62,6 @@ class ProtobufData {
 
   private String getProtoFieldName(String descriptorForTypeName, String connectFieldName) {
     return connectProtoNameMap.get(getProtoMapKey(descriptorForTypeName, connectFieldName));
-  }
-
-  ProtobufData(Class<? extends com.google.protobuf.GeneratedMessageV3> clazz, String legacyName) {
-    this.legacyName = legacyName;
-
-    try {
-      this.newBuilder = clazz.getDeclaredMethod("newBuilder");
-    } catch (NoSuchMethodException e) {
-      throw new ConnectException("Proto class " + clazz.getCanonicalName() + " is not a valid proto3 message class", e);
-    }
-
-    this.schema = toConnectSchema(getBuilder().getDefaultInstanceForType());
   }
 
   SchemaAndValue toConnectData(byte[] value) {
@@ -127,16 +96,14 @@ class ProtobufData {
 
     switch (descriptor.getType()) {
       case INT32:
-      case SINT32:
-      {
+      case SINT32: {
         builder = SchemaBuilder.int32();
         break;
       }
 
       case INT64:
       case SINT64:
-      case UINT32:
-      {
+      case UINT32: {
         builder = SchemaBuilder.int64();
         break;
       }
@@ -221,23 +188,40 @@ class ProtobufData {
     return Date.SCHEMA.name().equals(schema.name());
   }
 
-  private void setStructField(Schema schema, Message message, Struct result, Descriptors.FieldDescriptor fieldDescriptor) {
+  private void setStructField(Schema schema, DynamicMessage message, Struct result, Descriptors.FieldDescriptor fieldDescriptor) {
     final String fieldName = getConnectFieldName(fieldDescriptor);
     final Field field = schema.field(fieldName);
-    Object obj = message.getField(fieldDescriptor);
-    result.put(fieldName, toConnectData(field.schema(), obj));
+
+    // Skip over unset messages
+    if(fieldDescriptor.getType() == Descriptors.FieldDescriptor.Type.MESSAGE) {
+      if(!fieldDescriptor.isRepeated() && !message.hasField(fieldDescriptor)) {
+        return;
+      }
+    }
+
+    Object connectData = toConnectData(field.schema(), message.getField(fieldDescriptor));
+
+    result.put(fieldName, connectData);
   }
 
   Object toConnectData(Schema schema, Object value) {
     try {
       if (isProtobufTimestamp(schema)) {
-        com.google.protobuf.Timestamp timestamp = (com.google.protobuf.Timestamp) value;
-        return Timestamp.toLogical(schema, Timestamps.toMillis(timestamp));
+        try {
+          com.google.protobuf.Timestamp timestamp = com.google.protobuf.Timestamp.parseFrom(((Message) value).toByteString());
+          return Timestamp.toLogical(schema, Timestamps.toMillis(timestamp));
+        } catch(Exception e) {
+          throw new DataException(e.getLocalizedMessage());
+        }
       }
 
       if (isProtobufDate(schema)) {
-        com.google.type.Date date = (com.google.type.Date) value;
-        return ProtobufUtils.convertFromGoogleDate(date);
+        try {
+          com.google.type.Date date = com.google.type.Date.parseFrom(((Message) value).toByteString());
+          return ProtobufUtils.convertFromGoogleDate(date);
+        } catch(InvalidProtocolBufferException e) {
+          return new DataException(e.getLocalizedMessage());
+        }
       }
 
       Object converted = null;
@@ -279,16 +263,6 @@ class ProtobufData {
           break;
         }
 
-        // TODO - Do we need to support byte or short?
-        /*case INT8:
-          // Encoded as an Integer
-          converted = value == null ? null : ((Integer) value).byteValue();
-          break;
-        case INT16:
-          // Encoded as an Integer
-          converted = value == null ? null : ((Integer) value).shortValue();
-          break;*/
-
         case STRING:
           if (value instanceof String) {
             converted = value;
@@ -326,28 +300,27 @@ class ProtobufData {
         }
 
         case STRUCT: {
-          final Message message = (Message) value; // Validate type
-          if (message == message.getDefaultInstanceForType()) {
-            return null;
-          }
-
+          final DynamicMessage message = (DynamicMessage) value; // Validate struct is a message
           final Struct result = new Struct(schema.schema());
           final Descriptors.Descriptor descriptor = message.getDescriptorForType();
 
+          // Set one ofs into 'result'
           for (OneofDescriptor oneOfDescriptor : descriptor.getOneofs()) {
             final Descriptors.FieldDescriptor fieldDescriptor = message.getOneofFieldDescriptor(oneOfDescriptor);
-            setStructField(schema, message, result, fieldDescriptor);
+            // fieldDescriptor is null if unset, skip over
+            if(fieldDescriptor != null)
+              setStructField(schema, message, result, fieldDescriptor);
           }
 
+          // Set all others into 'result'
           for (Descriptors.FieldDescriptor fieldDescriptor : descriptor.getFields()) {
             Descriptors.OneofDescriptor oneOfDescriptor = fieldDescriptor.getContainingOneof();
+            // Skip over oneofs
             if (oneOfDescriptor != null) {
               continue;
             }
-
             setStructField(schema, message, result, fieldDescriptor);
           }
-
           converted = result;
           break;
         }
@@ -363,7 +336,7 @@ class ProtobufData {
   }
 
   byte[] fromConnectData(Object value) {
-    final com.google.protobuf.GeneratedMessageV3.Builder builder = getBuilder();
+    final DynamicMessage.Builder builder = (DynamicMessage.Builder)getBuilder();
     final Struct struct = (Struct) value;
 
     for (Field field : this.schema.fields()) {
@@ -373,7 +346,7 @@ class ProtobufData {
     return builder.build().toByteArray();
   }
 
-  private void fromConnectData(com.google.protobuf.GeneratedMessageV3.Builder builder, Field field, Object value) {
+  private void fromConnectData(DynamicMessage.Builder builder, Field field, Object value) {
     final String protobufFieldName = getProtoFieldName(builder.getDescriptorForType().getFullName(), field.name());
     final Descriptors.FieldDescriptor fieldDescriptor = builder.getDescriptorForType().findFieldByName(protobufFieldName);
     if (fieldDescriptor == null) {

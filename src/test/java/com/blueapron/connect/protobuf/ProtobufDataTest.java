@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
@@ -38,6 +39,18 @@ public class ProtobufDataTest {
 
   private final String LEGACY_NAME = "legacy_name";
   private final String VALUE_FIELD_NAME = "value";
+
+  private ProtobufData getTestProtobufData(String typeName) throws InvalidProtocolBufferException {
+    try {
+      String filename = this.getClass().getClassLoader().getResource("test.fds").getPath();
+      DescriptorSetSchemaProvider provider = new DescriptorSetSchemaProvider(filename);
+      ProtobufData protobufData = new ProtobufData(provider.getDescriptorForTypeName(typeName), LEGACY_NAME);
+
+      return protobufData;
+    } catch(Exception e) {
+      throw new InvalidProtocolBufferException(e.getLocalizedMessage());
+    }
+  }
 
   private SchemaAndValue getExpectedSchemaAndValue(Schema fieldSchema, Object value) {
     final SchemaBuilder schemaBuilder = SchemaBuilder.struct();
@@ -75,6 +88,7 @@ public class ProtobufDataTest {
     Timestamp timestamp = Timestamps.fromMillis(date.getTime());
     message.setUpdatedAt(timestamp);
     message.putMapType("Hello", "World");
+
     return message.build();
   }
 
@@ -203,183 +217,188 @@ public class ProtobufDataTest {
   }
 
   @Test
-  public void testToConnectDataWithNestedProtobufMessageAndStringUserId() throws ParseException {
+  public void testToConnectDataWithNestedProtobufMessageAndStringUserId() throws ParseException, InvalidProtocolBufferException {
     NestedTestProto message = createNestedTestProtoStringUserId();
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     Schema expectedSchema = getExpectedNestedTestProtoSchemaStringUserId();
     assertSchemasEqual(expectedSchema, result.schema());
+
     assertEquals(new SchemaAndValue(getExpectedNestedTestProtoSchemaStringUserId(), getExpectedNestedProtoResultStringUserId()), result);
   }
 
+
   @Test
-  public void testToConnectDataWithNestedProtobufMessageAndIntUserId() throws ParseException {
+  public void testToConnectDataWithNestedProtobufMessageAndIntUserId() throws ParseException, InvalidProtocolBufferException {
     NestedTestProto message = createNestedTestProtoIntUserId();
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertSchemasEqual(getExpectedNestedTestProtoSchemaIntUserId(), result.schema());
     assertEquals(new SchemaAndValue(getExpectedNestedTestProtoSchemaIntUserId(), getExpectedNestedTestProtoResultIntUserId()), result);
   }
 
   @Test
-  public void testToConnectDataDefaultOneOf() throws ParseException {
+  public void testToConnectDataDefaultOneOf() throws ParseException, InvalidProtocolBufferException {
     Schema schema = getComplexTypeSchemaBuilder().build();
     NestedTestProtoOuterClass.ComplexType message = createProtoDefaultOneOf();
-    ProtobufData protobufData = new ProtobufData(NestedTestProtoOuterClass.ComplexType.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.ComplexType");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertSchemasEqual(schema, result.schema());
     assertEquals(new SchemaAndValue(schema, getExpectedComplexTypeProtoWithDefaultOneOf()), result);
   }
 
   @Test
-  public void testToConnectDataDefaultOneOfCannotHaveTwoOneOfsSet() throws ParseException {
+  public void testToConnectDataDefaultOneOfCannotHaveTwoOneOfsSet() throws ParseException, InvalidProtocolBufferException {
     Schema schema = getComplexTypeSchemaBuilder().build();
     NestedTestProtoOuterClass.ComplexType message = createProtoMultipleSetOneOf();
-    ProtobufData protobufData = new ProtobufData(NestedTestProtoOuterClass.ComplexType.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.ComplexType");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertSchemasEqual(schema, result.schema());
     assertEquals(new SchemaAndValue(schema, getExpectedComplexTypeProtoWithDefaultOneOf()), result);
   }
+
 
   // Data Conversion tests
   @Test
-  public void testToConnectSupportsOptionalValues() {
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+  public void testToConnectSupportsOptionalValues() throws InvalidProtocolBufferException {
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     Schema schema = SchemaBuilder.OPTIONAL_BOOLEAN_SCHEMA.schema();
     assertNull(protobufData.toConnectData(schema, null));
   }
 
   @Test
-  public void testToConnectBoolean() {
+  public void testToConnectBoolean() throws InvalidProtocolBufferException {
     Boolean expectedValue = true;
     BoolValue.Builder builder = BoolValue.newBuilder();
     builder.setValue(expectedValue);
     BoolValue message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(BoolValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.BoolValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_BOOLEAN_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectInt32() {
+  public void testToConnectInt32() throws InvalidProtocolBufferException {
     Integer expectedValue = 12;
     Int32Value.Builder builder = Int32Value.newBuilder();
     builder.setValue(expectedValue);
     Int32Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(Int32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int32Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT32_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectInt32With0() {
+  public void testToConnectInt32With0() throws InvalidProtocolBufferException {
     Integer expectedValue = 0;
     Int32Value.Builder builder = Int32Value.newBuilder();
     builder.setValue(expectedValue);
     Int32Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(Int32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int32Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT32_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectInt32WithSint32() {
+  public void testToConnectInt32WithSint32() throws InvalidProtocolBufferException {
     int expectedValue = 12;
     SInt32ValueOuterClass.SInt32Value.Builder builder = SInt32ValueOuterClass.SInt32Value.newBuilder();
     builder.setValue(expectedValue);
     SInt32ValueOuterClass.SInt32Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(SInt32ValueOuterClass.SInt32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("SInt32Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT32_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectInt32WithUInt32() {
+  public void testToConnectInt32WithUInt32() throws InvalidProtocolBufferException {
     final Long UNSIGNED_RESULT = 4294967295L;
     Integer expectedValue = -1;
     UInt32ValueOuterClass.UInt32Value.Builder builder = UInt32ValueOuterClass.UInt32Value.newBuilder();
     builder.setValue(expectedValue);
     UInt32ValueOuterClass.UInt32Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(UInt32ValueOuterClass.UInt32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("UInt32Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT64_SCHEMA, UNSIGNED_RESULT), result);
   }
 
   @Test
-  public void testToConnectInt64() {
+  public void testToConnectInt64() throws InvalidProtocolBufferException {
     Long expectedValue = 12L;
     Int64Value.Builder builder = Int64Value.newBuilder();
     builder.setValue(expectedValue);
     Int64Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(Int64Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int64Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT64_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectSInt64() {
+  public void testToConnectSInt64() throws InvalidProtocolBufferException {
     Long expectedValue = 12L;
     SInt64ValueOuterClass.SInt64Value.Builder builder = SInt64ValueOuterClass.SInt64Value.newBuilder();
     builder.setValue(expectedValue);
     SInt64ValueOuterClass.SInt64Value message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(SInt64ValueOuterClass.SInt64Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("SInt64Value");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_INT64_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectFloat32() {
+  public void testToConnectFloat32() throws InvalidProtocolBufferException {
     Float expectedValue = 12.f;
     FloatValue.Builder builder = FloatValue.newBuilder();
     builder.setValue(expectedValue);
     FloatValue message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(FloatValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.FloatValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_FLOAT32_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectFloat64() {
+  public void testToConnectFloat64() throws InvalidProtocolBufferException {
     Double expectedValue = 12.0;
     DoubleValue.Builder builder = DoubleValue.newBuilder();
     builder.setValue(expectedValue);
     DoubleValue message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(DoubleValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.DoubleValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_FLOAT64_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectString() {
+  public void testToConnectString() throws InvalidProtocolBufferException {
     String expectedValue = "Hello";
     StringValue message = createStringValueMessage(expectedValue);
 
-    ProtobufData protobufData = new ProtobufData(StringValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.StringValue");
+
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_STRING_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectEmptyString() {
+  public void testToConnectEmptyString() throws InvalidProtocolBufferException {
     String expectedValue = "";
     StringValue message = createStringValueMessage(expectedValue);
 
-    ProtobufData protobufData = new ProtobufData(StringValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.StringValue");
+
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_STRING_SCHEMA, expectedValue), result);
   }
 
   @Test
-  public void testToConnectTimestamp() throws ParseException {
+  public void testToConnectTimestamp() throws ParseException, InvalidProtocolBufferException {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
     java.util.Date expectedValue = sdf.parse("2017/12/31");
 
@@ -388,7 +407,7 @@ public class ProtobufDataTest {
     builder.setValue(timestamp);
     TimestampValueOuterClass.TimestampValue message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(TimestampValueOuterClass.TimestampValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("TimestampValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
 
     Schema timestampSchema = org.apache.kafka.connect.data.Timestamp.builder().optional().build();
@@ -396,7 +415,7 @@ public class ProtobufDataTest {
   }
 
   @Test
-  public void testToConnectDate() throws ParseException {
+  public void testToConnectDate() throws ParseException, InvalidProtocolBufferException {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
     java.util.Date expectedValue = sdf.parse("2017/12/31");
 
@@ -409,7 +428,7 @@ public class ProtobufDataTest {
     builder.setValue(dateBuilder.build());
     DateValueOuterClass.DateValue message = builder.build();
 
-    ProtobufData protobufData = new ProtobufData(DateValueOuterClass.DateValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("DateValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
 
     Schema dateSchema = org.apache.kafka.connect.data.Date.builder().optional().build();
@@ -423,15 +442,15 @@ public class ProtobufDataTest {
   }
 
   @Test(expected = DataException.class)
-  public void testToConnectSchemaMismatchPrimitive() {
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+  public void testToConnectSchemaMismatchPrimitive() throws InvalidProtocolBufferException {
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     Schema schema = Schema.OPTIONAL_FLOAT32_SCHEMA;
     protobufData.toConnectData(schema, 12L);
   }
 
   @Test(expected = DataException.class)
-  public void testToConnectSchemaMismatchArray() {
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+  public void testToConnectSchemaMismatchArray() throws InvalidProtocolBufferException {
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     Schema schema = SchemaBuilder.array(Schema.OPTIONAL_STRING_SCHEMA).build();
     protobufData.toConnectData(schema, Arrays.asList(1, 2, 3));
   }
@@ -449,7 +468,7 @@ public class ProtobufDataTest {
     Byte value = 15;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_INT8_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(Int32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int32Value");
     protobufData.fromConnectData(struct);
   }
 
@@ -459,16 +478,17 @@ public class ProtobufDataTest {
     Short value = 15;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_INT16_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(Int32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int32Value");
     protobufData.fromConnectData(struct);
   }
+
 
   @Test
   public void testFromConnectInt32() throws InvalidProtocolBufferException {
     Integer value = 15;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_INT32_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(Int32Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int32Value");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = Int32Value.parseFrom(messageBytes);
 
@@ -483,7 +503,7 @@ public class ProtobufDataTest {
     Long value = 15L;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_INT64_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(Int64Value.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.Int64Value");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = Int64Value.parseFrom(messageBytes);
 
@@ -502,7 +522,7 @@ public class ProtobufDataTest {
 
     Struct struct = wrapValueStruct(timestampSchema.schema(), value);
 
-    ProtobufData protobufData = new ProtobufData(TimestampValueOuterClass.TimestampValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("TimestampValue");
     Message message = TimestampValueOuterClass.TimestampValue.parseFrom(protobufData.fromConnectData(struct));
     assertEquals(1, message.getAllFields().size());
 
@@ -519,7 +539,7 @@ public class ProtobufDataTest {
 
     Struct struct = wrapValueStruct(dateSchema.schema(), value);
 
-    ProtobufData protobufData = new ProtobufData(DateValueOuterClass.DateValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("DateValue");
     Message message = DateValueOuterClass.DateValue.parseFrom(protobufData.fromConnectData(struct));
     assertEquals(1, message.getAllFields().size());
 
@@ -532,7 +552,7 @@ public class ProtobufDataTest {
     Float value = 12.3f;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_FLOAT32_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(FloatValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.FloatValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = FloatValue.parseFrom(messageBytes);
 
@@ -547,7 +567,7 @@ public class ProtobufDataTest {
     Double value = 12.3;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_FLOAT64_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(DoubleValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.DoubleValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = DoubleValue.parseFrom(messageBytes);
 
@@ -562,7 +582,7 @@ public class ProtobufDataTest {
     Boolean value = true;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_BOOLEAN_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(BoolValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.BoolValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = BoolValue.parseFrom(messageBytes);
 
@@ -577,7 +597,7 @@ public class ProtobufDataTest {
     Boolean value = false;
     Struct struct = wrapValueStruct(Schema.OPTIONAL_BOOLEAN_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(BoolValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.BoolValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = BoolValue.parseFrom(messageBytes);
 
@@ -590,7 +610,7 @@ public class ProtobufDataTest {
     String value = "Hello";
     Struct struct = wrapValueStruct(Schema.OPTIONAL_STRING_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(StringValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.StringValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = StringValue.parseFrom(messageBytes);
 
@@ -600,27 +620,12 @@ public class ProtobufDataTest {
     assertEquals(value, message.getField(fieldDescriptor));
   }
 
-  /*@Test
-  public void testFromConnectEmptyString() throws InvalidProtocolBufferException {
-    String value = "";
-    Struct struct = wrapValueStruct(Schema.OPTIONAL_STRING_SCHEMA, value);
-
-    ProtobufData protobufData = new ProtobufData(StringValue.class, LEGACY_NAME);
-    byte[] messageBytes = protobufData.fromConnectData(struct);
-    Message message = StringValue.parseFrom(messageBytes);
-
-    assertEquals(1, message.getAllFields().size());
-
-    Descriptors.FieldDescriptor fieldDescriptor = message.getDescriptorForType().findFieldByName(VALUE_FIELD_NAME);
-    assertEquals(value, message.getField(fieldDescriptor));
-  }*/
-
   @Test
   public void testFromConnectBytes() throws InvalidProtocolBufferException {
     byte[] value = ByteBuffer.wrap("foo".getBytes()).array();
     Struct struct = wrapValueStruct(Schema.OPTIONAL_BYTES_SCHEMA, value);
 
-    ProtobufData protobufData = new ProtobufData(BytesValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.BytesValue");
     byte[] messageBytes = protobufData.fromConnectData(struct);
     Message message = BytesValue.parseFrom(messageBytes);
 
@@ -630,16 +635,18 @@ public class ProtobufDataTest {
     assertEquals(ByteString.copyFrom(value), message.getField(fieldDescriptor));
   }
 
+
   @Test(expected = DataException.class)
-  public void testFromConnectDataMismatchPrimitive() {
+  public void testFromConnectDataMismatchPrimitive() throws InvalidProtocolBufferException {
     Struct struct = wrapValueStruct(Schema.OPTIONAL_INT64_SCHEMA, 12L);
 
-    ProtobufData protobufData = new ProtobufData(BoolValue.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.BoolValue");
+
     protobufData.fromConnectData(struct);
   }
 
   @Test(expected = DataException.class)
-  public void testFromConnectDataUnsupportedSchemaType() throws ParseException {
+  public void testFromConnectDataUnsupportedSchemaType() throws ParseException, InvalidProtocolBufferException {
     // UserId and ComplexType are structs, which are unsupported
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
     java.util.Date value = sdf.parse("2017/09/18");
@@ -647,7 +654,7 @@ public class ProtobufDataTest {
     Struct struct = new Struct(getExpectedNestedTestProtoSchema());
     struct.put("updated_at", value);
 
-    ProtobufData protobufData = new ProtobufData(NestedTestProto.class, LEGACY_NAME);
+    ProtobufData protobufData = getTestProtobufData("blueapron.connect.protobuf.NestedTestProto");
     byte[] messageBytes = protobufData.fromConnectData(struct);
   }
 }

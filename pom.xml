@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.github.blueapron</groupId>
+    <groupId>com.github.alexjreid</groupId>
     <artifactId>kafka-connect-protobuf-converter</artifactId>
     <packaging>jar</packaging>
-    <version>2.0.1</version>
+    <version>0.1.0</version>
+    <description>Experimental fork of https://github.com/blueapron/kafka-connect-protobuf-converter/tree/v2.0.1 to use descriptors instead of generated Java classes.</description>
 
     <properties>
-        <protobuf.version>3.4.0</protobuf.version>
+        <protobuf.version>3.6.1</protobuf.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <issueManagement>
         <system>github</system>
-        <url>https://github.com/blueapron/kafka-connect-protobuf-converter/issues</url>
+        <url>https://github.com/alexjreid/kafka-connect-protobuf-converter/issues</url>
     </issueManagement>
 
     <licenses>
@@ -31,7 +32,7 @@
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>
-            <version>1.0.0</version>
+            <version>1.1.1</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -55,23 +56,43 @@
             <version>4.12</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>uk.co.jemos.podam</groupId>
-            <artifactId>podam</artifactId>
-            <version>6.0.2.RELEASE</version>
-            <scope>test</scope>
-        </dependency>
+
     </dependencies>
 
-    <repositories>
-        <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
-        </repository>
-    </repositories>
-
     <build>
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.4.1.Final</version>
+            </extension>
+        </extensions>
+
         <plugins>
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>0.5.0</version>
+                <configuration>
+                    <protoSourceRoot>${project.basedir}/src/test/java/com/blueapron/connect/protobuf/protos</protoSourceRoot>
+                    <protocArtifact>com.google.protobuf:protoc:3.1.0:exe:${os.detected.classifier}</protocArtifact>
+                    <writeDescriptorSet>true</writeDescriptorSet>
+                    <descriptorSetOutputDirectory>${project.basedir}/src/test/resources</descriptorSetOutputDirectory>
+                    <descriptorSetFileName>test.fds</descriptorSetFileName>
+                    <includeDependenciesInDescriptorSet>true</includeDependenciesInDescriptorSet>
+                    <attachDescriptorSet>true</attachDescriptorSet>
+                    <attachProtoSources>false</attachProtoSources>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>compile</goal>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -96,41 +117,6 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>io.confluent</groupId>
-                <artifactId>kafka-connect-maven-plugin</artifactId>
-                <version>0.10.0</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>kafka-connect</goal>
-                        </goals>
-                        <configuration>
-                            <title>Kafka Connect Protobuf Converter</title>
-                            <documentationUrl>
-                                https://github.com/blueapron/kafka-connect-protobuf-converter/blob/master/README.md
-                            </documentationUrl>
-                            <description>Proto3 converter for Kafka Connect.</description>
-                            <ownerUsername>blueapron</ownerUsername>
-                            <ownerType>organization</ownerType>
-                            <ownerName>Blue Apron, LLC.</ownerName>
-                            <ownerUrl>https://www.blueapron.com/</ownerUrl>
-                            <componentTypes>
-                                <componentType>converter</componentType>
-                            </componentTypes>
-                            <tags>
-                                <tag>proto3</tag>
-                                <tag>protocol buffers</tag>
-                                <tag>protobuf</tag>
-                                <tag>converter</tag>
-                            </tags>
-                            <supportUrl>${project.issueManagement.url}</supportUrl>
-                            <supportSummary>Support provided through community involvement.
-                            </supportSummary>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
