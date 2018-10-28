@@ -10,3 +10,8 @@ message TestMessage {
     string test_string = 1;
     string some_field = 2;
 }
+
+message TestNaN {
+    google.protobuf.DoubleValue dbl = 1;
+    string another = 2;
+}
