@@ -123,16 +123,6 @@ class ProtobufData {
         break;
       }
 
-      // TODO - Do we need to support byte or short?
-      /*case INT8:
-        // Encoded as an Integer
-        converted = value == null ? null : ((Integer) value).byteValue();
-        break;
-      case INT16:
-        // Encoded as an Integer
-        converted = value == null ? null : ((Integer) value).shortValue();
-        break;*/
-
       case STRING:
         builder = SchemaBuilder.string();
         break;
@@ -156,9 +146,11 @@ class ProtobufData {
           break;
         }
 
+
         builder = SchemaBuilder.struct();
         for (Descriptors.FieldDescriptor fieldDescriptor : descriptor.getMessageType().getFields()) {
-          builder.field(getConnectFieldName(fieldDescriptor), toConnectSchema(fieldDescriptor));
+          Schema schema = toConnectSchema(fieldDescriptor);
+          builder.field(getConnectFieldName(fieldDescriptor), schema);
         }
 
         break;
@@ -169,6 +161,7 @@ class ProtobufData {
     }
 
     builder.optional();
+
     Schema schema = builder.build();
 
     if (descriptor.isRepeated()) {
@@ -200,7 +193,6 @@ class ProtobufData {
     }
 
     Object connectData = toConnectData(field.schema(), message.getField(fieldDescriptor));
-
     result.put(fieldName, connectData);
   }
 
@@ -229,14 +221,14 @@ class ProtobufData {
         // Pass through types
         case INT32: {
           Integer intValue = (Integer) value; // Validate type
-          converted = value;
+          converted = intValue;
           break;
         }
 
         case INT64: {
           try {
             Long longValue = (Long) value; // Validate type
-            converted = value;
+            converted = longValue;
           } catch (ClassCastException e) {
             Integer intValue = (Integer) value; // Validate type
             converted = Integer.toUnsignedLong(intValue);
@@ -247,19 +239,27 @@ class ProtobufData {
 
         case FLOAT32: {
           Float floatValue = (Float) value; // Validate type
-          converted = value;
+          if(floatValue.isNaN()) {
+            converted = null;
+          } else {
+            converted = floatValue;
+          }
           break;
         }
 
         case FLOAT64: {
           Double doubleValue = (Double) value; // Validate type
-          converted = value;
+          if(doubleValue.isNaN()) {
+            converted = null;
+          } else {
+            converted = doubleValue;
+          }
           break;
         }
 
         case BOOLEAN: {
           Boolean boolValue = (Boolean) value; // Validate type
-          converted = value;
+          converted = boolValue;
           break;
         }
 

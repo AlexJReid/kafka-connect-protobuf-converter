@@ -100,6 +100,13 @@ public class ProtobufDataTest {
     return getExpectedNestedTestProtoSchema();
   }
 
+  private Schema getTestNaNSchema() {
+    final SchemaBuilder testNaNBuilder = SchemaBuilder.struct();
+    testNaNBuilder.field("dbl", SchemaBuilder.struct().optional().field("value", Schema.OPTIONAL_FLOAT64_SCHEMA).build());
+    testNaNBuilder.field("another", SchemaBuilder.string().optional().build());
+    return testNaNBuilder.build();
+  }
+
   private SchemaBuilder getComplexTypeSchemaBuilder() {
     final SchemaBuilder complexTypeBuilder = SchemaBuilder.struct();
     complexTypeBuilder.field("one_id", SchemaBuilder.string().optional().build());
@@ -373,6 +380,36 @@ public class ProtobufDataTest {
     ProtobufData protobufData = getTestProtobufData("google.protobuf.DoubleValue");
     SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
     assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_FLOAT64_SCHEMA, expectedValue), result);
+  }
+
+  @Test
+  public void testToConnectFloat64NaN() throws InvalidProtocolBufferException {
+    Double expectedValue = null;
+    DoubleValue.Builder builder = DoubleValue.newBuilder();
+    builder.setValue(Double.NaN);
+    DoubleValue message = builder.build();
+
+    ProtobufData protobufData = getTestProtobufData("google.protobuf.DoubleValue");
+    SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
+
+    assertEquals(getExpectedSchemaAndValue(Schema.OPTIONAL_FLOAT64_SCHEMA, expectedValue), result);
+  }
+
+  @Test
+  public void testToConnectFloat64NaNEmbedded() throws InvalidProtocolBufferException {
+    TestMessageProtos.TestNaN message = TestMessageProtos.TestNaN.newBuilder()
+      .setDbl(DoubleValue.newBuilder().setValue(Double.NaN)).build();
+
+    ProtobufData protobufData = getTestProtobufData("TestNaN");
+    SchemaAndValue result = protobufData.toConnectData(message.toByteArray());
+
+    Struct dbl = new Struct(SchemaBuilder.struct().optional().field("value", Schema.OPTIONAL_FLOAT64_SCHEMA).build());
+
+    Struct struct = new Struct(getTestNaNSchema())
+      .put("dbl", dbl)
+      .put("another", "");
+
+    assertEquals(new SchemaAndValue(getTestNaNSchema(), struct), result);
   }
 
   @Test
